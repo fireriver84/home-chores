@@ -1,0 +1,57 @@
+# Home Chores for Home Assistant
+
+Home Chores is a Home Assistant-native family chore board. It installs as a custom integration, adds a **Chores** item to the Home Assistant sidebar, inherits the current Home Assistant theme, and stores its data in Home Assistant's `.storage` directory.
+
+## What it includes
+
+- **Up for grabs** chores that ask who completed the task before awarding stars.
+- A personal chore list for every household member.
+- Daily or weekly recurrence, multiple occurrences per period, and optional weekday limits.
+- Configurable star values and a full-screen star burst on completion.
+- Parent tools for adding/removing people and chores, correcting star totals, reviewing activity, and undoing false completions.
+- Admin-only enforcement for all parent actions through Home Assistant's authenticated WebSocket API.
+- Live updates across open Home Assistant dashboards.
+- Friendly starter data demonstrating dog feeding, vacuuming, homework, teeth brushing, and room cleaning.
+
+The future behaviour system can use the same person IDs and activity model, but it is intentionally not part of this first chore-focused version.
+
+## Install manually
+
+1. Copy `custom_components/home_chores` into the `custom_components` directory inside your Home Assistant configuration directory.
+2. Restart Home Assistant.
+3. Go to **Settings → Devices & services → Add integration**.
+4. Search for **Home Chores** and add it.
+5. Open **Chores** from the Home Assistant sidebar.
+
+If Home Assistant does not find the integration, clear the browser cache after restarting and confirm the folder is exactly `custom_components/home_chores`.
+
+## Install with HACS during development
+
+Add this repository as a custom repository in HACS using the **Integration** category, install **Home Chores**, restart Home Assistant, and add the integration from **Settings → Devices & services**.
+
+## Permissions and data
+
+Any signed-in Home Assistant user can view the board and complete a chore. Only Home Assistant administrators can add or remove people and chores, adjust scores, or undo completions. Hiding the parent tools is therefore backed by server-side authorization rather than only a visual toggle.
+
+Data is stored locally by Home Assistant in `.storage/home_chores`. No cloud service or separate database is used.
+
+## Development layout
+
+```text
+custom_components/home_chores/
+├── __init__.py              # integration and sidebar panel registration
+├── config_flow.py           # UI setup flow
+├── store.py                 # durable people, chores, stars, and activity
+├── websocket_api.py         # authenticated frontend API
+├── schedule.py              # recurrence calculations
+└── frontend/
+    └── home-chores-panel.js # responsive Home Assistant panel
+```
+
+## Recurrence behaviour
+
+- A daily chore resets at local midnight.
+- A weekly chore resets Monday at local midnight.
+- `Times` controls how many completions are available in that period.
+- Selecting weekdays makes the chore available only on those days. This supports routines such as homework on weekdays while leaving a twice-daily tooth-brushing task active every day.
+

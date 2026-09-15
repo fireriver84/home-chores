@@ -1,0 +1,14 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Set up Home Chores",
+        "description": "Add a shared chore board to the Home Assistant sidebar. Chores, people, completions, and star totals stay in Home Assistant."
+      }
+    },
+    "abort": {
+      "already_configured": "Home Chores is already configured."
+    }
+  }
+}
+
