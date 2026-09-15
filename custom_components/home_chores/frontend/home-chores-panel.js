@@ -12,6 +12,7 @@ class HomeChoresPanel extends HTMLElement {
     this._selected = "all";
     this._tab = "chores";
     this._parent = false;
+    this._parentToken = null;
     this._loading = true;
     this._dialog = null;
     this._toast = "";
@@ -137,7 +138,7 @@ class HomeChoresPanel extends HTMLElement {
         <header>
           <div class="brand"><span class="brand-star">★</span><span>Home Chores</span></div>
           <div class="date">${new Intl.DateTimeFormat(undefined, { weekday: "long", month: "long", day: "numeric" }).format(new Date())}</div>
-          ${admin ? `<button class="parent-toggle ${this._parent ? "active" : ""}" data-action="parent"><ha-icon icon="mdi:shield-account"></ha-icon>${this._parent ? "Done managing" : "Parent tools"}</button>` : ""}
+          <button class="parent-toggle ${this._parent ? "active" : ""}" data-action="parent"><ha-icon icon="mdi:${this._parent ? "lock-open-variant" : "lock"}"></ha-icon>${this._parent ? "Lock parent tools" : "Parent tools"}</button>
         </header>
         ${this._loading ? this._loadingView() : this._data ? `
           <aside>
@@ -200,10 +201,11 @@ class HomeChoresPanel extends HTMLElement {
       </section>
       ${this._parent ? `
         <section class="parent-bar">
-          <div><ha-icon icon="mdi:shield-account"></ha-icon><span><strong>Parent tools</strong><small>Add chores, correct stars, or remove items.</small></span></div>
+          <div><ha-icon icon="mdi:shield-account"></ha-icon><span><strong>Parent tools unlocked</strong><small>Edit chores, unmark completions, or correct stars.</small></span></div>
           <div class="parent-actions">
             ${person ? `<button data-action="score"><ha-icon icon="mdi:star-cog-outline"></ha-icon>Adjust stars</button>` : ""}
             ${person ? `<button class="danger-subtle" data-action="remove-person"><ha-icon icon="mdi:account-remove-outline"></ha-icon>Remove person</button>` : ""}
+            <button data-action="change-pin"><ha-icon icon="mdi:key-variant"></ha-icon>Change PIN</button>
             <button class="primary" data-action="add-chore"><ha-icon icon="mdi:plus"></ha-icon>Add chore</button>
           </div>
         </section>` : ""}
@@ -224,11 +226,12 @@ class HomeChoresPanel extends HTMLElement {
         <div class="chore-head">
           <span class="chore-icon"><ha-icon icon="${this._escape(chore.icon)}"></ha-icon></span>
           <span class="stars">★ ${chore.stars}</span>
-          ${this._parent ? `<button class="icon-button delete" title="Remove chore" data-remove-chore="${this._escape(chore.id)}"><ha-icon icon="mdi:trash-can-outline"></ha-icon></button>` : ""}
+          ${this._parent ? `<button class="icon-button edit" title="Edit chore" data-edit-chore="${this._escape(chore.id)}"><ha-icon icon="mdi:pencil-outline"></ha-icon></button><button class="icon-button delete" title="Remove chore" data-remove-chore="${this._escape(chore.id)}"><ha-icon icon="mdi:trash-can-outline"></ha-icon></button>` : ""}
         </div>
         <div class="chore-copy"><h2>${this._escape(chore.title)}</h2><p>${this._escape(this._frequency(chore))}</p></div>
         <div class="card-foot">
           <span class="occurrences">${dots}<small>${scheduled ? count + " of " + chore.times : "Not today"}</small></span>
+          ${this._parent && count > 0 ? `<button class="unmark-button" data-unmark="${this._escape(chore.id)}">Unmark</button>` : ""}
           <button class="complete-button" data-complete="${this._escape(chore.id)}" ${disabled ? "disabled" : ""} aria-label="Complete ${this._escape(chore.title)}">
             <ha-icon icon="${complete ? "mdi:check" : "mdi:star-four-points"}"></ha-icon>
             ${complete ? "Done" : "Complete"}
@@ -281,15 +284,60 @@ class HomeChoresPanel extends HTMLElement {
         </form>`);
     }
     if (d.type === "chore") {
-      const target = this._selected === "all" ? "" : this._selected;
-      return this._modal("Add a chore", "Set who owns it, when it repeats, and what it’s worth.", `
+      const chore = d.choreId ? this._chore(d.choreId) : null;
+      const target = chore ? (chore.assignee_id || "") : (this._selected === "all" ? "" : this._selected);
+      const frequency = chore?.frequency || "day";
+      const weekdays = chore?.weekdays || [];
+      return this._modal(chore ? "Edit chore" : "Add a chore", "Set who owns it, when it repeats, and what it’s worth.", `
         <form id="chore-form" class="form">
-          <label><span>Chore name</span><input name="title" maxlength="80" required autofocus placeholder="e.g. Put away dishes"></label>
-          <div class="form-row"><label><span>List</span><select name="assignee_id"><option value="">Up for grabs</option>${this._data.people.map(person => `<option value="${this._escape(person.id)}" ${target === person.id ? "selected" : ""}>${this._escape(person.name)}</option>`).join("")}</select></label><label><span>Icon</span><select name="icon">${ICONS.map(icon => `<option value="${icon}">${icon.replace("mdi:", "").replaceAll("-", " ")}</option>`).join("")}</select></label></div>
-          <div class="form-row three"><label><span>Repeats</span><select name="frequency"><option value="day">Every day</option><option value="week">Every week</option></select></label><label><span>Times</span><input name="times" type="number" min="1" max="20" value="1" required></label><label><span>Stars</span><input name="stars" type="number" min="1" max="100" value="1" required></label></div>
-          <fieldset><legend>Days (leave all off for every day)</legend><div class="day-picker">${["M","T","W","T","F","S","S"].map((day, index) => `<label><input type="checkbox" name="weekday" value="${index}"><span>${day}</span></label>`).join("")}</div></fieldset>
-          <button class="submit" type="submit">Add chore</button>
+          <input type="hidden" name="chore_id" value="${this._escape(chore?.id || "")}">
+          <label><span>Chore name</span><input name="title" maxlength="80" required autofocus placeholder="e.g. Put away dishes" value="${this._escape(chore?.title || "")}"></label>
+          <div class="form-row"><label><span>List</span><select name="assignee_id"><option value="">Up for grabs</option>${this._data.people.map(person => `<option value="${this._escape(person.id)}" ${target === person.id ? "selected" : ""}>${this._escape(person.name)}</option>`).join("")}</select></label><label><span>Icon</span><select name="icon">${ICONS.map(icon => `<option value="${icon}" ${chore?.icon === icon ? "selected" : ""}>${icon.replace("mdi:", "").replaceAll("-", " ")}</option>`).join("")}</select></label></div>
+          <div class="form-row three"><label><span>Repeats</span><select name="frequency"><option value="day" ${frequency === "day" ? "selected" : ""}>Every day</option><option value="week" ${frequency === "week" ? "selected" : ""}>Every week</option></select></label><label><span>Times</span><input name="times" type="number" min="1" max="20" value="${chore?.times || 1}" required></label><label><span>Stars</span><input name="stars" type="number" min="1" max="100" value="${chore?.stars || 1}" required></label></div>
+          <fieldset><legend>Days (leave all off for every day)</legend><div class="day-picker">${["M","T","W","T","F","S","S"].map((day, index) => `<label><input type="checkbox" name="weekday" value="${index}" ${weekdays.includes(index) ? "checked" : ""}><span>${day}</span></label>`).join("")}</div></fieldset>
+          <button class="submit" type="submit">${chore ? "Save changes" : "Add chore"}</button>
         </form>`);
+    }
+    if (d.type === "pin-setup") {
+      return this._modal("Set a parent PIN", "Use 4–8 digits. Parent changes will require this PIN, even from a non-admin Home Assistant account.", `
+        <form id="pin-setup-form" class="form pin-form">
+          <label><span>New PIN</span><input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4,8}" minlength="4" maxlength="8" required autofocus autocomplete="new-password"></label>
+          <label><span>Confirm PIN</span><input name="confirm" type="password" inputmode="numeric" pattern="[0-9]{4,8}" minlength="4" maxlength="8" required autocomplete="new-password"></label>
+          <button class="submit" type="submit">Set PIN</button>
+        </form>`);
+    }
+    if (d.type === "pin-unlock") {
+      return this._modal("Unlock parent tools", "The dashboard will lock again after 30 minutes or when you choose Lock.", `
+        <form id="pin-unlock-form" class="form pin-form">
+          <label><span>Parent PIN</span><input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4,8}" minlength="4" maxlength="8" required autofocus autocomplete="current-password"></label>
+          <button class="submit" type="submit">Unlock</button>
+          <button class="text-button" type="button" data-action="forgot-pin">Forgot PIN?</button>
+        </form>`);
+    }
+    if (d.type === "pin-recover") {
+      return this._modal("Recover parent access", "Enter the recovery code saved when the PIN was created. A new recovery code will replace it.", `
+        <form id="pin-recover-form" class="form pin-form">
+          <label><span>Recovery code</span><input name="recovery_code" maxlength="24" required autofocus placeholder="XXXX-XXXX-XXXX-XXXX" autocomplete="off"></label>
+          <label><span>New PIN</span><input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4,8}" minlength="4" maxlength="8" required autocomplete="new-password"></label>
+          <label><span>Confirm PIN</span><input name="confirm" type="password" inputmode="numeric" pattern="[0-9]{4,8}" minlength="4" maxlength="8" required autocomplete="new-password"></label>
+          <button class="submit" type="submit">Reset PIN</button>
+          ${this.hass?.user?.is_admin ? `<button class="text-button" type="button" data-action="admin-recovery">Lost the recovery code? Use HA admin recovery</button>` : ""}
+        </form>`);
+    }
+    if (d.type === "admin-reset" || d.type === "change-pin") {
+      const adminReset = d.type === "admin-reset";
+      return this._modal(adminReset ? "Administrator recovery" : "Change parent PIN", adminReset ? "Your Home Assistant administrator account is the final recovery method." : "Changing the PIN also creates a new recovery code.", `
+        <form id="pin-change-form" class="form pin-form" data-admin="${adminReset}">
+          <label><span>New PIN</span><input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4,8}" minlength="4" maxlength="8" required autofocus autocomplete="new-password"></label>
+          <label><span>Confirm PIN</span><input name="confirm" type="password" inputmode="numeric" pattern="[0-9]{4,8}" minlength="4" maxlength="8" required autocomplete="new-password"></label>
+          <button class="submit" type="submit">${adminReset ? "Reset parent PIN" : "Change PIN"}</button>
+        </form>`);
+    }
+    if (d.type === "recovery-code") {
+      return this._modal("Save your recovery code", "This code is shown only once. Store it in a password manager or another safe place.", `
+        <div class="recovery-code" aria-label="Recovery code">${this._escape(d.code)}</div>
+        <button class="submit full" data-copy-recovery="${this._escape(d.code)}">Copy recovery code</button>
+        <button class="text-button full" data-action="recovery-done">I saved it</button>`);
     }
     if (d.type === "score") {
       const person = this._person(this._selected);
@@ -317,12 +365,27 @@ class HomeChoresPanel extends HTMLElement {
     this.shadowRoot.querySelectorAll("[data-tab]").forEach(button => button.onclick = () => {
       this._tab = button.dataset.tab; this._render();
     });
-    this.shadowRoot.querySelectorAll("[data-action]").forEach(button => button.onclick = event => {
+    this.shadowRoot.querySelectorAll("[data-action]").forEach(button => button.onclick = async event => {
       const action = button.dataset.action;
       if (action === "close" && (event.target === button || button.classList.contains("modal-close") || button.textContent === "Cancel")) { this._dialog = null; this._render(); }
-      if (action === "parent") { this._parent = !this._parent; this._render(); }
+      if (action === "parent") {
+        if (this._parent) {
+          try { await this._call("lock_parent", { parent_token: this._parentToken }); } catch (_) {}
+          this._parent = false; this._parentToken = null; this._render();
+        } else if (this._data.parent_security?.configured) {
+          this._dialog = { type: "pin-unlock" }; this._render();
+        } else if (this.hass?.user?.is_admin) {
+          this._dialog = { type: "pin-setup" }; this._render();
+        } else {
+          this._showToast("A Home Assistant administrator must set the first parent PIN");
+        }
+      }
       if (action === "add-person") { this._dialog = { type: "person" }; this._render(); }
       if (action === "add-chore") { this._dialog = { type: "chore" }; this._render(); }
+      if (action === "change-pin") { this._dialog = { type: "change-pin" }; this._render(); }
+      if (action === "forgot-pin") { this._dialog = { type: "pin-recover" }; this._render(); }
+      if (action === "admin-recovery") { this._dialog = { type: "admin-reset" }; this._render(); }
+      if (action === "recovery-done") { this._dialog = null; this._render(); }
       if (action === "score") { this._dialog = { type: "score" }; this._render(); }
       if (action === "remove-person") { const p = this._person(this._selected); this._dialog = { type: "confirm", action: "person", title: "Remove " + p.name + "?", text: "Their personal chore list will also be removed." }; this._render(); }
       if (action === "retry") this._load();
@@ -336,6 +399,12 @@ class HomeChoresPanel extends HTMLElement {
     this.shadowRoot.querySelectorAll("[data-remove-chore]").forEach(button => button.onclick = () => {
       const c = this._chore(button.dataset.removeChore); this._dialog = { type: "confirm", action: "chore:" + c.id, title: "Remove this chore?", text: "“" + c.title + "” will no longer appear on the board." }; this._render();
     });
+    this.shadowRoot.querySelectorAll("[data-edit-chore]").forEach(button => button.onclick = () => {
+      this._dialog = { type: "chore", choreId: button.dataset.editChore }; this._render();
+    });
+    this.shadowRoot.querySelectorAll("[data-unmark]").forEach(button => button.onclick = () => {
+      this._mutate("undo_chore", { chore_id: button.dataset.unmark }, "Completion unmarked and stars removed");
+    });
     this.shadowRoot.querySelectorAll("[data-undo]").forEach(button => button.onclick = () => this._mutate("undo_completion", { completion_id: button.dataset.undo }, "Completion undone"));
     this.shadowRoot.querySelectorAll("[data-confirm]").forEach(button => button.onclick = () => {
       const action = button.dataset.confirm;
@@ -345,9 +414,35 @@ class HomeChoresPanel extends HTMLElement {
     const personForm = this.shadowRoot.querySelector("#person-form");
     if (personForm) personForm.onsubmit = event => { event.preventDefault(); const f = new FormData(personForm); this._mutate("add_person", { name: f.get("name"), avatar: f.get("avatar"), color: f.get("color") }, "Person added"); };
     const choreForm = this.shadowRoot.querySelector("#chore-form");
-    if (choreForm) choreForm.onsubmit = event => { event.preventDefault(); const f = new FormData(choreForm); this._mutate("add_chore", { title: f.get("title"), icon: f.get("icon"), assignee_id: f.get("assignee_id") || null, frequency: f.get("frequency"), times: Number(f.get("times")), weekdays: f.getAll("weekday").map(Number), stars: Number(f.get("stars")) }, "Chore added"); };
+    if (choreForm) choreForm.onsubmit = event => { event.preventDefault(); const f = new FormData(choreForm); const choreId = f.get("chore_id"); const values = { title: f.get("title"), icon: f.get("icon"), assignee_id: f.get("assignee_id") || null, frequency: f.get("frequency"), times: Number(f.get("times")), weekdays: f.getAll("weekday").map(Number), stars: Number(f.get("stars")) }; this._mutate(choreId ? "update_chore" : "add_chore", choreId ? { chore_id: choreId, ...values } : values, choreId ? "Chore updated" : "Chore added"); };
     const scoreForm = this.shadowRoot.querySelector("#score-form");
     if (scoreForm) scoreForm.onsubmit = event => { event.preventDefault(); const f = new FormData(scoreForm); this._mutate("adjust_score", { person_id: this._selected, delta: Number(f.get("delta")), reason: f.get("reason") }, "Stars adjusted"); };
+    const setupForm = this.shadowRoot.querySelector("#pin-setup-form");
+    if (setupForm) setupForm.onsubmit = event => { event.preventDefault(); this._submitPinForm(setupForm, "set_parent_pin", "pin"); };
+    const unlockForm = this.shadowRoot.querySelector("#pin-unlock-form");
+    if (unlockForm) unlockForm.onsubmit = async event => { event.preventDefault(); const f = new FormData(unlockForm); try { this._acceptParentResult(await this._call("unlock_parent", { pin: f.get("pin") })); } catch (error) { this._showToast(this._message(error)); } };
+    const recoverForm = this.shadowRoot.querySelector("#pin-recover-form");
+    if (recoverForm) recoverForm.onsubmit = event => { event.preventDefault(); this._submitPinForm(recoverForm, "recover_parent_pin", "new_pin", { recovery_code: new FormData(recoverForm).get("recovery_code") }); };
+    const changeForm = this.shadowRoot.querySelector("#pin-change-form");
+    if (changeForm) changeForm.onsubmit = event => { event.preventDefault(); const admin = changeForm.dataset.admin === "true"; this._submitPinForm(changeForm, admin ? "admin_reset_parent_pin" : "change_parent_pin", "new_pin", admin ? {} : { parent_token: this._parentToken }); };
+    this.shadowRoot.querySelectorAll("[data-copy-recovery]").forEach(button => button.onclick = async () => { try { await navigator.clipboard.writeText(button.dataset.copyRecovery); button.textContent = "Copied"; } catch (_) { this._showToast("Copy failed—write down the recovery code instead"); } });
+  }
+
+  async _submitPinForm(form, command, pinField, extra = {}) {
+    const values = new FormData(form);
+    const pin = values.get("pin");
+    if (pin !== values.get("confirm")) { this._showToast("The PIN entries do not match"); return; }
+    try {
+      const result = await this._call(command, { [pinField]: pin, ...extra });
+      this._acceptParentResult(result);
+    } catch (error) { this._showToast(this._message(error)); }
+  }
+
+  _acceptParentResult(result) {
+    this._parentToken = result.parent_token;
+    this._parent = true;
+    this._dialog = result.recovery_code ? { type: "recovery-code", code: result.recovery_code } : null;
+    this._render();
   }
 
   async _complete(choreId, personId, source) {
@@ -367,12 +462,17 @@ class HomeChoresPanel extends HTMLElement {
 
   async _mutate(type, values, success, beforeRender) {
     try {
-      await this._call(type, values);
+      await this._call(type, { ...values, parent_token: this._parentToken });
       if (beforeRender) beforeRender();
       this._dialog = null;
       await this._load();
       this._showToast(success);
-    } catch (error) { this._showToast(this._message(error)); }
+    } catch (error) {
+      const message = this._message(error);
+      if (message.toLowerCase().includes("parent tools are locked")) {
+        this._parent = false; this._parentToken = null; this._dialog = { type: "pin-unlock" }; this._render();
+      } else this._showToast(message);
+    }
   }
 
   _showToast(message) {
@@ -441,10 +541,13 @@ class HomeChoresPanel extends HTMLElement {
     .stars { margin-left:auto; color:#8a6800; background:#fff3bd; border-radius:999px; padding:6px 9px; font-size:13px; font-weight:850; }
     .icon-button { width:32px; height:32px; display:grid; place-items:center; border:0; border-radius:9px; background:transparent; cursor:pointer; color:#9c5260; } .icon-button:hover { background:#ffe8ec; }
     .chore-copy { margin-top:19px; } .chore-copy h2 { margin:0; font-size:19px; letter-spacing:-.02em; } .chore-copy p { margin:6px 0 0; color:var(--secondary-text-color,#778196); font-size:13px; }
-    .card-foot { margin-top:auto; padding-top:18px; display:flex; justify-content:space-between; align-items:center; gap:10px; }
+    .card-foot { margin-top:auto; padding-top:18px; display:flex; justify-content:flex-end; align-items:center; gap:9px; flex-wrap:wrap; }
+    .card-foot .occurrences { margin-right:auto; }
     .occurrences { display:flex; align-items:center; gap:4px; flex-wrap:wrap; } .occurrences i { width:8px; height:8px; border-radius:50%; background:#dce1ea; } .occurrences i.done { background:#6c5ce7; } .occurrences small { width:100%; margin-top:3px; color:#8b95a6; font-size:11px; }
     .complete-button { min-height:40px; border:0; border-radius:12px; padding:0 13px; display:flex; align-items:center; gap:7px; background:#6c5ce7; color:#fff; cursor:pointer; font-weight:800; box-shadow:0 6px 16px rgba(108,92,231,.24); }
     .complete-button:disabled { cursor:default; box-shadow:none; background:#e1e5eb; color:#6c7688; }
+    .unmark-button { min-height:38px; border:1px solid #d7dce5; border-radius:11px; padding:0 10px; background:transparent; color:#9b4050; cursor:pointer; font-size:12px; font-weight:800; }
+    .unmark-button:hover { background:#fff0f2; border-color:#e7b8c0; }
     .activity-list { display:grid; gap:9px; } .activity-row { display:grid; grid-template-columns:42px 1fr auto auto; gap:13px; align-items:center; padding:14px 16px; background:var(--card-background-color,#fff); border:1px solid var(--divider-color,#e2e6ed); border-radius:15px; }
     .avatar.small { width:38px; height:38px; border-radius:12px; font-size:13px; } .activity-copy { display:grid; gap:4px; } .activity-copy small { color:var(--secondary-text-color,#768196); }
     .activity-stars { color:#317356; font-weight:850; } .activity-stars.negative { color:#b53e4b; } .undo { border:0; background:transparent; color:#6c5ce7; font-weight:800; cursor:pointer; }
@@ -457,6 +560,9 @@ class HomeChoresPanel extends HTMLElement {
     .form-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; } .form-row.three { grid-template-columns:1.4fr .7fr .7fr; } fieldset { border:0; padding:0; margin:0; } legend { margin-bottom:8px; font-size:13px; color:var(--secondary-text-color,#657187); font-weight:750; }
     .day-picker { display:grid; grid-template-columns:repeat(7,1fr); gap:6px; } .day-picker label { display:block; } .day-picker input { position:absolute; opacity:0; pointer-events:none; } .day-picker span { aspect-ratio:1; display:grid; place-items:center; border:1px solid var(--divider-color,#d7dce5); border-radius:10px; cursor:pointer; } .day-picker input:checked+span { background:#6c5ce7; color:#fff; border-color:#6c5ce7; }
     .submit { min-height:48px; border:0; border-radius:12px; background:#6c5ce7; color:#fff; cursor:pointer; font-weight:850; }
+    .submit.full,.text-button.full { width:100%; margin-top:12px; }
+    .text-button { min-height:40px; border:0; background:transparent; color:#5a49d3; cursor:pointer; font-weight:800; }
+    .recovery-code { padding:18px 12px; border:1px dashed #8d80e9; border-radius:14px; background:#f2f0ff; color:#35269b; text-align:center; font:800 clamp(17px,4vw,24px)/1.2 ui-monospace,SFMono-Regular,Consolas,monospace; letter-spacing:.08em; }
     .confirm-actions { display:flex; justify-content:flex-end; gap:10px; } .confirm-actions button { min-height:42px; border:1px solid var(--divider-color,#d8dde6); border-radius:10px; background:transparent; padding:0 16px; cursor:pointer; font-weight:800; } .confirm-actions .danger { background:#b83d4a; color:#fff; border-color:#b83d4a; }
     .toast { position:fixed; z-index:40; left:50%; bottom:24px; transform:translateX(-50%); min-width:220px; max-width:calc(100vw - 32px); padding:13px 18px; border-radius:13px; background:#17233b; color:#fff; text-align:center; font-weight:750; box-shadow:0 12px 35px rgba(0,0,0,.25); animation:toast-in .22s ease-out; }
     .star-layer { position:fixed; inset:0; z-index:35; pointer-events:none; overflow:hidden; } .star-layer span { position:absolute; left:50%; top:58%; color:#ffd43b; font-size:clamp(17px,3vw,34px); text-shadow:0 2px 0 #d59b00; animation:star-burst 1.15s cubic-bezier(.16,.8,.25,1) var(--delay) both; }

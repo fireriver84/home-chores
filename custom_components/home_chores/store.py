@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import datetime
+import secrets
+import time
 from typing import Any
 from uuid import uuid4
 
@@ -13,6 +15,7 @@ from homeassistant.util import dt as dt_util
 
 from .const import EVENT_UPDATED, STORAGE_KEY, STORAGE_VERSION
 from .schedule import is_available_today, period_start
+from .security import hash_secret, new_recovery_code, new_salt, verify_secret
 
 DEFAULT_DATA: dict[str, Any] = {
     "people": [
@@ -74,6 +77,12 @@ DEFAULT_DATA: dict[str, Any] = {
     ],
     "completions": [],
     "adjustments": [],
+    "parent_security": {
+        "pin_hash": None,
+        "pin_salt": None,
+        "recovery_hash": None,
+        "recovery_salt": None,
+    },
 }
 
 
@@ -84,12 +93,16 @@ class ChoreStore:
         self.hass = hass
         self._store: Store[dict[str, Any]] = Store(hass, STORAGE_VERSION, STORAGE_KEY)
         self.data: dict[str, Any] = deepcopy(DEFAULT_DATA)
+        self._parent_sessions: dict[str, tuple[str, float]] = {}
+        self._failed_unlocks: dict[str, tuple[int, float]] = {}
 
     async def async_load(self) -> None:
         """Load stored state, or create the friendly first-run example."""
         stored = await self._store.async_load()
         if isinstance(stored, dict):
             self.data = stored
+            for key, value in DEFAULT_DATA.items():
+                self.data.setdefault(key, deepcopy(value))
         else:
             await self._store.async_save(self.data)
 
@@ -100,6 +113,8 @@ class ChoreStore:
     def snapshot(self) -> dict[str, Any]:
         """Return a safe copy ordered newest-first for the frontend."""
         result = deepcopy(self.data)
+        security = result.pop("parent_security", {})
+        result["parent_security"] = {"configured": bool(security.get("pin_hash"))}
         result["completions"] = sorted(
             result["completions"], key=lambda item: item["completed_at"], reverse=True
         )[:100]
@@ -107,6 +122,117 @@ class ChoreStore:
             result["adjustments"], key=lambda item: item["created_at"], reverse=True
         )[:100]
         return result
+
+    def parent_session_valid(self, token: str, user_id: str) -> bool:
+        """Check that a parent session belongs to this HA user and is unexpired."""
+        session = self._parent_sessions.get(token)
+        if session is None:
+            return False
+        owner, expires_at = session
+        if owner != user_id or expires_at <= time.monotonic():
+            self._parent_sessions.pop(token, None)
+            return False
+        return True
+
+    async def _set_parent_secrets(self, pin: str) -> tuple[str, str]:
+        """Persist a PIN and rotate the recovery code, returning both code and session."""
+        recovery_code = new_recovery_code()
+        pin_salt = new_salt()
+        recovery_salt = new_salt()
+        pin_hash, recovery_hash = await self.hass.async_add_executor_job(
+            lambda: (
+                hash_secret(pin, pin_salt),
+                hash_secret(recovery_code, recovery_salt),
+            )
+        )
+        self.data["parent_security"] = {
+            "pin_hash": pin_hash,
+            "pin_salt": pin_salt,
+            "recovery_hash": recovery_hash,
+            "recovery_salt": recovery_salt,
+        }
+        self._parent_sessions.clear()
+        await self._save("parent_pin_changed")
+        return recovery_code, pin_hash
+
+    def _new_parent_session(self, user_id: str) -> str:
+        token = secrets.token_urlsafe(32)
+        self._parent_sessions[token] = (user_id, time.monotonic() + 30 * 60)
+        return token
+
+    async def set_parent_pin(self, pin: str, user_id: str) -> dict[str, str]:
+        """Create parent security for the first time."""
+        if self.data["parent_security"].get("pin_hash"):
+            raise ValueError("A parent PIN is already configured")
+        recovery_code, _ = await self._set_parent_secrets(pin)
+        return {
+            "parent_token": self._new_parent_session(user_id),
+            "recovery_code": recovery_code,
+        }
+
+    async def unlock_parent(self, pin: str, user_id: str) -> str:
+        """Verify a PIN and issue a short-lived, user-bound parent session."""
+        failed_count, blocked_until = self._failed_unlocks.get(user_id, (0, 0.0))
+        now = time.monotonic()
+        if blocked_until > now:
+            raise ValueError("Too many attempts. Try again in five minutes")
+
+        security = self.data["parent_security"]
+        if not security.get("pin_hash"):
+            raise ValueError("A parent PIN has not been configured")
+        valid = await self.hass.async_add_executor_job(
+            verify_secret, pin, security["pin_salt"], security["pin_hash"]
+        )
+        if not valid:
+            failed_count += 1
+            self._failed_unlocks[user_id] = (
+                failed_count,
+                now + 300 if failed_count >= 5 else 0.0,
+            )
+            raise ValueError("Incorrect PIN")
+        self._failed_unlocks.pop(user_id, None)
+        return self._new_parent_session(user_id)
+
+    async def recover_parent_pin(
+        self, recovery_code: str, new_pin: str, user_id: str
+    ) -> dict[str, str]:
+        """Replace a forgotten PIN using the one-time recovery code."""
+        security = self.data["parent_security"]
+        if not security.get("recovery_hash"):
+            raise ValueError("No recovery code is configured")
+        valid = await self.hass.async_add_executor_job(
+            verify_secret,
+            recovery_code.upper().strip(),
+            security["recovery_salt"],
+            security["recovery_hash"],
+        )
+        if not valid:
+            raise ValueError("Recovery code is not valid")
+        next_code, _ = await self._set_parent_secrets(new_pin)
+        return {
+            "parent_token": self._new_parent_session(user_id),
+            "recovery_code": next_code,
+        }
+
+    async def admin_reset_parent_pin(self, pin: str, user_id: str) -> dict[str, str]:
+        """Let an authenticated HA administrator recover a lost code."""
+        recovery_code, _ = await self._set_parent_secrets(pin)
+        return {
+            "parent_token": self._new_parent_session(user_id),
+            "recovery_code": recovery_code,
+        }
+
+    async def change_parent_pin(self, pin: str, user_id: str) -> dict[str, str]:
+        """Change an unlocked parent PIN and rotate the recovery code."""
+        recovery_code, _ = await self._set_parent_secrets(pin)
+        return {
+            "parent_token": self._new_parent_session(user_id),
+            "recovery_code": recovery_code,
+        }
+
+    def lock_parent(self, token: str) -> None:
+        """Invalidate a parent session."""
+        self._parent_sessions.pop(token, None)
 
     def _person(self, person_id: str) -> dict[str, Any]:
         person = next((p for p in self.data["people"] if p["id"] == person_id), None)
@@ -154,6 +280,26 @@ class ChoreStore:
         }
         self.data["chores"].append(chore)
         await self._save("chore_added")
+        return chore
+
+    async def update_chore(self, chore_id: str, values: dict[str, Any]) -> dict[str, Any]:
+        """Update every editable chore property without changing its history."""
+        chore = self._chore(chore_id)
+        assignee_id = values.get("assignee_id")
+        if assignee_id:
+            self._person(assignee_id)
+        chore.update(
+            {
+                "title": values["title"].strip(),
+                "icon": values.get("icon") or "mdi:check-circle-outline",
+                "assignee_id": assignee_id,
+                "frequency": values["frequency"],
+                "times": values["times"],
+                "weekdays": values.get("weekdays", []),
+                "stars": values["stars"],
+            }
+        )
+        await self._save("chore_updated")
         return chore
 
     async def remove_chore(self, chore_id: str) -> None:
@@ -221,3 +367,17 @@ class ChoreStore:
         ]
         await self._save("completion_undone")
 
+    async def undo_latest_for_chore(self, chore_id: str) -> None:
+        """Undo the newest completion in the active period for a chore."""
+        chore = self._chore(chore_id)
+        start = period_start(dt_util.now(), chore["frequency"])
+        matching = [
+            item
+            for item in self.data["completions"]
+            if item["chore_id"] == chore_id
+            and datetime.fromisoformat(item["completed_at"]) >= start
+        ]
+        if not matching:
+            raise ValueError("This chore has no current completion to undo")
+        latest = max(matching, key=lambda item: item["completed_at"])
+        await self.undo_completion(latest["id"])

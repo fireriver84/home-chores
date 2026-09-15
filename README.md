@@ -9,7 +9,9 @@ Home Chores is a Home Assistant-native family chore board. It installs as a cust
 - Daily or weekly recurrence, multiple occurrences per period, and optional weekday limits.
 - Configurable star values and a full-screen star burst on completion.
 - Parent tools for adding/removing people and chores, correcting star totals, reviewing activity, and undoing false completions.
-- Admin-only enforcement for all parent actions through Home Assistant's authenticated WebSocket API.
+- Edit every chore field after creation, including its name, owner, icon, recurrence, occurrence limit, weekdays, and stars.
+- Unmark the latest completion directly from its chore card, immediately returning the chore to available status and removing its stars.
+- Server-enforced parent PIN sessions with lockout protection, a one-time recovery code, and Home Assistant administrator recovery.
 - Live updates across open Home Assistant dashboards.
 - Friendly starter data demonstrating dog feeding, vacuuming, homework, teeth brushing, and room cleaning.
 
@@ -44,7 +46,9 @@ Instead:
 
 ## Permissions and data
 
-Any signed-in Home Assistant user can view the board and complete a chore. Only Home Assistant administrators can add or remove people and chores, adjust scores, or undo completions. Hiding the parent tools is therefore backed by server-side authorization rather than only a visual toggle.
+Any signed-in Home Assistant user can view the board and complete a chore. The first parent PIN must be created by a Home Assistant administrator. After that, any signed-in household account can unlock parent tools with the PIN for a 30-minute session. Management actions are checked against that server-side session rather than protected only by a visual toggle.
+
+When the PIN is created or changed, Home Chores shows a new one-time recovery code. Save it in a password manager. A valid recovery code can replace a forgotten PIN and is rotated after use. If both PIN and recovery code are lost, a signed-in Home Assistant administrator can use the final recovery option.
 
 Data is stored locally by Home Assistant in `.storage/home_chores`. No cloud service or separate database is used.
 
