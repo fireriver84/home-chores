@@ -29,6 +29,19 @@ If Home Assistant does not find the integration, clear the browser cache after r
 
 Add this repository as a custom repository in HACS using the **Integration** category, install **Home Chores**, restart Home Assistant, and add the integration from **Settings → Devices & services**.
 
+### Important: use HACS, not the Apps store
+
+Do **not** add this URL under **Settings → Apps → Install app → Repositories**. That screen accepts container apps (formerly called add-ons) and will report that this project “is not a valid app repository.” Home Chores is a custom integration, not a container app.
+
+Instead:
+
+1. Open **HACS** from the Home Assistant sidebar.
+2. Open the menu in the top-right and choose **Custom repositories**.
+3. Enter `https://github.com/fireriver84/home-chores`.
+4. Select **Integration** as the category and add it.
+5. Find **Home Chores** in HACS and download it.
+6. Restart Home Assistant, then add **Home Chores** from **Settings → Devices & services → Add integration**.
+
 ## Permissions and data
 
 Any signed-in Home Assistant user can view the board and complete a chore. Only Home Assistant administrators can add or remove people and chores, adjust scores, or undo completions. Hiding the parent tools is therefore backed by server-side authorization rather than only a visual toggle.
@@ -54,4 +67,3 @@ custom_components/home_chores/
 - A weekly chore resets Monday at local midnight.
 - `Times` controls how many completions are available in that period.
 - Selecting weekdays makes the chore available only on those days. This supports routines such as homework on weekdays while leaving a twice-daily tooth-brushing task active every day.
-
