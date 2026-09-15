@@ -50,6 +50,7 @@ def async_register_commands(hass: HomeAssistant) -> None:
         ws_remove_person,
         ws_add_chore,
         ws_update_chore,
+        ws_move_chore,
         ws_remove_chore,
         ws_complete,
         ws_adjust_score,
@@ -277,6 +278,26 @@ async def ws_update_chore(hass, connection, msg) -> None:
     try:
         chore = await _store(hass).update_chore(msg["chore_id"], msg)
         connection.send_result(msg["id"], chore)
+    except ValueError as err:
+        _error(connection, msg, err)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "home_chores/move_chore",
+        vol.Required("chore_id"): str,
+        vol.Required("direction"): vol.In(["up", "down"]),
+        vol.Required("parent_token"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_move_chore(hass, connection, msg) -> None:
+    """Move a chore within its current list."""
+    if not _require_parent(hass, connection, msg):
+        return
+    try:
+        await _store(hass).move_chore(msg["chore_id"], msg["direction"])
+        connection.send_result(msg["id"])
     except ValueError as err:
         _error(connection, msg, err)
 

@@ -211,12 +211,12 @@ class HomeChoresPanel extends HTMLElement {
           </div>
         </section>` : ""}
       <section class="chore-grid">
-        ${chores.length ? chores.map(chore => this._choreCard(chore)).join("") : `
+        ${chores.length ? chores.map((chore, index) => this._choreCard(chore, index, chores.length)).join("") : `
           <div class="empty-list"><span>✓</span><h2>No chores here yet</h2><p>${this._parent ? "Add the first chore to this list." : "A parent can add a chore here."}</p></div>`}
       </section>`;
   }
 
-  _choreCard(chore) {
+  _choreCard(chore, index, total) {
     const count = this._count(chore);
     const complete = count >= chore.times;
     const scheduled = this._scheduledToday(chore);
@@ -227,7 +227,7 @@ class HomeChoresPanel extends HTMLElement {
         <div class="chore-head">
           <span class="chore-icon"><ha-icon icon="${this._escape(chore.icon)}"></ha-icon></span>
           <span class="stars">★ ${chore.stars}</span>
-          ${this._parent ? `<button class="icon-button edit" title="Edit chore" data-edit-chore="${this._escape(chore.id)}"><ha-icon icon="mdi:pencil-outline"></ha-icon></button><button class="icon-button delete" title="Remove chore" data-remove-chore="${this._escape(chore.id)}"><ha-icon icon="mdi:trash-can-outline"></ha-icon></button>` : ""}
+          ${this._parent ? `<span class="order-controls"><button class="icon-button" title="Move chore up" aria-label="Move ${this._escape(chore.title)} up" data-move-chore="${this._escape(chore.id)}" data-direction="up" ${index === 0 ? "disabled" : ""}><ha-icon icon="mdi:arrow-up"></ha-icon></button><button class="icon-button" title="Move chore down" aria-label="Move ${this._escape(chore.title)} down" data-move-chore="${this._escape(chore.id)}" data-direction="down" ${index === total - 1 ? "disabled" : ""}><ha-icon icon="mdi:arrow-down"></ha-icon></button></span><button class="icon-button edit" title="Edit chore" data-edit-chore="${this._escape(chore.id)}"><ha-icon icon="mdi:pencil-outline"></ha-icon></button><button class="icon-button delete" title="Remove chore" data-remove-chore="${this._escape(chore.id)}"><ha-icon icon="mdi:trash-can-outline"></ha-icon></button>` : ""}
         </div>
         <div class="chore-copy"><h2>${this._escape(chore.title)}</h2><p>${this._escape(this._frequency(chore))}</p></div>
         <div class="card-foot">
@@ -407,6 +407,9 @@ class HomeChoresPanel extends HTMLElement {
     this.shadowRoot.querySelectorAll("[data-edit-chore]").forEach(button => button.onclick = () => {
       this._dialog = { type: "chore", choreId: button.dataset.editChore }; this._render();
     });
+    this.shadowRoot.querySelectorAll("[data-move-chore]").forEach(button => button.onclick = () => {
+      this._mutate("move_chore", { chore_id: button.dataset.moveChore, direction: button.dataset.direction }, "Chore moved");
+    });
     this.shadowRoot.querySelectorAll("[data-unmark]").forEach(button => button.onclick = () => {
       this._mutate("undo_chore", { chore_id: button.dataset.unmark }, "Completion unmarked and stars removed");
     });
@@ -552,6 +555,7 @@ class HomeChoresPanel extends HTMLElement {
     .chore-head { display:flex; align-items:center; gap:8px; } .chore-icon { display:grid; place-items:center; width:44px; height:44px; border-radius:14px; color:#5444cc; background:#eeebff; }
     .stars { margin-left:auto; color:#8a6800; background:#fff3bd; border-radius:999px; padding:6px 9px; font-size:13px; font-weight:850; }
     .icon-button { width:32px; height:32px; display:grid; place-items:center; border:0; border-radius:9px; background:transparent; cursor:pointer; color:#9c5260; } .icon-button:hover { background:#ffe8ec; }
+    .icon-button:disabled { opacity:.3; cursor:default; background:transparent; } .order-controls { display:flex; gap:1px; } .order-controls .icon-button { color:#657187; }
     .chore-copy { margin-top:19px; } .chore-copy h2 { margin:0; font-size:19px; letter-spacing:-.02em; } .chore-copy p { margin:6px 0 0; color:var(--secondary-text-color,#778196); font-size:13px; }
     .card-foot { margin-top:auto; padding-top:18px; display:flex; justify-content:flex-end; align-items:center; gap:9px; flex-wrap:wrap; }
     .card-foot .occurrences { margin-right:auto; }

@@ -307,6 +307,27 @@ class ChoreStore:
         self.data["chores"] = [c for c in self.data["chores"] if c["id"] != chore_id]
         await self._save("chore_removed")
 
+    async def move_chore(self, chore_id: str, direction: str) -> None:
+        """Move a chore one place within its shared or personal list."""
+        chore = self._chore(chore_id)
+        peers = [
+            item
+            for item in self.data["chores"]
+            if item.get("assignee_id") == chore.get("assignee_id")
+        ]
+        index = peers.index(chore)
+        target_index = index - 1 if direction == "up" else index + 1
+        if target_index < 0 or target_index >= len(peers):
+            raise ValueError("Chore is already at the edge of this list")
+        other = peers[target_index]
+        chore_index = self.data["chores"].index(chore)
+        other_index = self.data["chores"].index(other)
+        self.data["chores"][chore_index], self.data["chores"][other_index] = (
+            self.data["chores"][other_index],
+            self.data["chores"][chore_index],
+        )
+        await self._save("chore_reordered")
+
     async def complete(self, chore_id: str, person_id: str) -> dict[str, Any]:
         chore = self._chore(chore_id)
         person = self._person(person_id)
