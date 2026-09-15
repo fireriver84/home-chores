@@ -13,6 +13,8 @@ Home Chores is a Home Assistant-native family chore board. It installs as a cust
 - Unmark the latest completion directly from its chore card, immediately returning the chore to available status and removing its stars.
 - Server-enforced parent PIN sessions with lockout protection, a one-time recovery code, and Home Assistant administrator recovery.
 - Live updates across open Home Assistant dashboards.
+- Tablet-friendly family navigation that keeps each person's star total and Add person control visible.
+- A dedicated menu button that reopens the main Home Assistant sidebar from the chore panel.
 - Friendly starter data demonstrating dog feeding, vacuuming, homework, teeth brushing, and room cleaning.
 
 The future behaviour system can use the same person IDs and activity model, but it is intentionally not part of this first chore-focused version.

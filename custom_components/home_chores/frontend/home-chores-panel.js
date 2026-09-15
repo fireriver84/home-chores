@@ -136,6 +136,7 @@ class HomeChoresPanel extends HTMLElement {
       <style>${this._styles()}</style>
       <div class="shell">
         <header>
+          <button class="menu-button" data-action="toggle-menu" aria-label="Open Home Assistant sidebar"><ha-icon icon="mdi:menu"></ha-icon></button>
           <div class="brand"><span class="brand-star">★</span><span>Home Chores</span></div>
           <div class="date">${new Intl.DateTimeFormat(undefined, { weekday: "long", month: "long", day: "numeric" }).format(new Date())}</div>
           <button class="parent-toggle ${this._parent ? "active" : ""}" data-action="parent"><ha-icon icon="mdi:${this._parent ? "lock-open-variant" : "lock"}"></ha-icon>${this._parent ? "Lock parent tools" : "Parent tools"}</button>
@@ -380,6 +381,9 @@ class HomeChoresPanel extends HTMLElement {
           this._showToast("A Home Assistant administrator must set the first parent PIN");
         }
       }
+      if (action === "toggle-menu") {
+        this.dispatchEvent(new CustomEvent("hass-toggle-menu", { bubbles: true, composed: true }));
+      }
       if (action === "add-person") { this._dialog = { type: "person" }; this._render(); }
       if (action === "add-chore") { this._dialog = { type: "chore" }; this._render(); }
       if (action === "change-pin") { this._dialog = { type: "change-pin" }; this._render(); }
@@ -502,7 +506,9 @@ class HomeChoresPanel extends HTMLElement {
     :host { display:block; min-height:100%; color:var(--primary-text-color,#17233b); background:var(--primary-background-color,#f3f6fb); font-family:var(--paper-font-body1_-_font-family,Inter,system-ui,sans-serif); }
     * { box-sizing:border-box; } button,input,select { font:inherit; } button { color:inherit; }
     .shell { min-height:100vh; display:grid; grid-template-columns:260px minmax(0,1fr); grid-template-rows:72px 1fr; }
-    header { grid-column:1/-1; display:grid; grid-template-columns:260px 1fr auto; align-items:center; padding:0 24px; background:var(--card-background-color,#fff); border-bottom:1px solid var(--divider-color,#e7eaf0); position:sticky; top:0; z-index:5; }
+    header { grid-column:1/-1; display:grid; grid-template-columns:auto 230px 1fr auto; gap:14px; align-items:center; padding:0 24px; background:var(--card-background-color,#fff); border-bottom:1px solid var(--divider-color,#e7eaf0); position:sticky; top:0; z-index:5; }
+    .menu-button { width:42px; height:42px; border:0; border-radius:12px; display:grid; place-items:center; background:transparent; cursor:pointer; color:var(--primary-text-color,#17233b); }
+    .menu-button:hover { background:var(--secondary-background-color,#eef1f5); }
     .brand { display:flex; align-items:center; gap:10px; font-size:20px; font-weight:800; letter-spacing:-.02em; }
     .brand-star { display:grid; place-items:center; width:34px; height:34px; border-radius:11px; color:#18233c; background:#ffd85a; transform:rotate(-5deg); }
     .date { color:var(--secondary-text-color,#697386); font-size:14px; }
@@ -569,8 +575,8 @@ class HomeChoresPanel extends HTMLElement {
     .loading,.empty { grid-column:1/-1; display:grid; place-items:center; align-content:center; gap:12px; min-height:70vh; text-align:center; } .spinner { width:38px; height:38px; border:4px solid #dedaf8; border-top-color:#6c5ce7; border-radius:50%; animation:spin .8s linear infinite; }
     @keyframes spin { to { transform:rotate(360deg); } } @keyframes toast-in { from { opacity:0; transform:translate(-50%,12px); } } @keyframes star-burst { 0% { opacity:0; transform:translate(0,0) scale(.2) rotate(0); } 15% { opacity:1; } 100% { opacity:0; transform:translate(var(--x),var(--y)) scale(1.2) rotate(var(--r)); } }
     @media (prefers-reduced-motion:reduce) { *,*::before,*::after { scroll-behavior:auto!important; animation-duration:.01ms!important; transition-duration:.01ms!important; } }
-    @media (max-width:1000px) { .shell { grid-template-columns:220px minmax(0,1fr); } header { grid-template-columns:220px 1fr auto; } .chore-grid { grid-template-columns:repeat(2,minmax(220px,1fr)); } .parent-bar { align-items:flex-start; flex-direction:column; } }
-    @media (max-width:720px) { .shell { display:block; } header { height:66px; display:flex; padding:0 14px; } .date { display:none; } .parent-toggle { margin-left:auto; font-size:0; padding:0; width:42px; } aside { padding:14px; border-right:0; border-bottom:1px solid var(--divider-color,#e3e7ee); overflow-x:auto; } aside>.eyebrow,.family-total,.add-member,.chev,.member-copy small { display:none; } .members { display:flex; margin:0; } .member { display:flex; width:auto; min-width:max-content; padding:7px 10px; } .member-copy strong { max-width:110px; } main { padding:0 14px 34px; } .tabs { height:54px; } .overview,.history-head { padding:25px 0 18px; display:block; } .progress-card { width:100%; margin-top:18px; } .chore-grid { grid-template-columns:1fr; } .chore-card { min-height:190px; } .parent-actions { justify-content:flex-start!important; } .activity-row { grid-template-columns:38px 1fr auto; } .undo { grid-column:2/-1; justify-self:start; padding:0; } .modal { padding:22px 18px; border-radius:20px; } .person-picker { grid-template-columns:repeat(2,1fr); } .form-row,.form-row.three { grid-template-columns:1fr; } }
+    @media (max-width:1000px) { .shell { grid-template-columns:220px minmax(0,1fr); } header { grid-template-columns:auto 190px 1fr auto; } .chore-grid { grid-template-columns:repeat(2,minmax(220px,1fr)); } .parent-bar { align-items:flex-start; flex-direction:column; } }
+    @media (max-width:720px) { .shell { display:block; } header { height:66px; display:flex; padding:0 12px; gap:9px; } .brand-star { display:none; } .brand { font-size:18px; } .date { display:none; } .parent-toggle { margin-left:auto; font-size:0; padding:0; width:42px; } aside { padding:12px 14px; border-right:0; border-bottom:1px solid var(--divider-color,#e3e7ee); overflow-x:auto; } aside>.eyebrow,.family-total,.chev { display:none; } .members { display:flex; margin:0; gap:4px; } .member { display:flex; width:auto; min-width:max-content; padding:7px 10px; } .member-copy strong { max-width:110px; } .member-copy small { display:block; } .add-member { display:flex; margin:9px 0 0; width:auto; min-width:145px; } main { padding:0 14px 34px; } .tabs { height:54px; } .overview,.history-head { padding:25px 0 18px; display:block; } .progress-card { width:100%; margin-top:18px; } .chore-grid { grid-template-columns:1fr; } .chore-card { min-height:190px; } .parent-actions { justify-content:flex-start!important; } .activity-row { grid-template-columns:38px 1fr auto; } .undo { grid-column:2/-1; justify-self:start; padding:0; } .modal { padding:22px 18px; border-radius:20px; } .person-picker { grid-template-columns:repeat(2,1fr); } .form-row,.form-row.three { grid-template-columns:1fr; } }
   `; }
 }
 
