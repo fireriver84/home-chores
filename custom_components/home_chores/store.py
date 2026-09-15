@@ -264,23 +264,37 @@ class ChoreStore:
         self.data["chores"] = [c for c in self.data["chores"] if c["assignee_id"] != person_id]
         await self._save("person_removed")
 
-    async def add_chore(self, values: dict[str, Any]) -> dict[str, Any]:
-        assignee_id = values.get("assignee_id")
-        if assignee_id:
-            self._person(assignee_id)
-        chore = {
-            "id": uuid4().hex,
-            "title": values["title"].strip(),
-            "icon": values.get("icon") or "mdi:check-circle-outline",
-            "assignee_id": assignee_id,
-            "frequency": values["frequency"],
-            "times": values["times"],
-            "weekdays": values.get("weekdays", []),
-            "stars": values["stars"],
-        }
-        self.data["chores"].append(chore)
-        await self._save("chore_added")
-        return chore
+    async def add_chore(self, values: dict[str, Any]) -> list[dict[str, Any]]:
+        """Create an independent chore in every selected list."""
+        raw_targets = values.get("assignee_ids")
+        if raw_targets is None:
+            raw_targets = [values.get("assignee_id")]
+        targets: list[str | None] = []
+        for assignee_id in raw_targets:
+            if assignee_id not in targets:
+                targets.append(assignee_id)
+        if not targets:
+            raise ValueError("Choose at least one chore list")
+        for assignee_id in targets:
+            if assignee_id:
+                self._person(assignee_id)
+
+        chores: list[dict[str, Any]] = []
+        for assignee_id in targets:
+            chore = {
+                "id": uuid4().hex,
+                "title": values["title"].strip(),
+                "icon": values.get("icon") or "mdi:check-circle-outline",
+                "assignee_id": assignee_id,
+                "frequency": values["frequency"],
+                "times": values["times"],
+                "weekdays": values.get("weekdays", []),
+                "stars": values["stars"],
+            }
+            self.data["chores"].append(chore)
+            chores.append(chore)
+        await self._save("chores_added")
+        return chores
 
     async def update_chore(self, chore_id: str, values: dict[str, Any]) -> dict[str, Any]:
         """Update every editable chore property without changing its history."""

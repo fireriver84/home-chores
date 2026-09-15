@@ -235,6 +235,7 @@ async def ws_remove_person(hass, connection, msg) -> None:
         vol.Required("title"): vol.All(str, vol.Length(min=1, max=80)),
         vol.Optional("icon", default="mdi:check-circle-outline"): str,
         vol.Optional("assignee_id"): vol.Any(str, None),
+        vol.Optional("assignee_ids"): [vol.Any(str, None)],
         vol.Required("frequency"): vol.In(["day", "week"]),
         vol.Required("times"): vol.All(vol.Coerce(int), vol.Range(min=1, max=20)),
         vol.Optional("weekdays", default=[]): [vol.All(vol.Coerce(int), vol.Range(min=0, max=6))],
@@ -248,8 +249,8 @@ async def ws_add_chore(hass, connection, msg) -> None:
     if not _require_parent(hass, connection, msg):
         return
     try:
-        chore = await _store(hass).add_chore(msg)
-        connection.send_result(msg["id"], chore)
+        chores = await _store(hass).add_chore(msg)
+        connection.send_result(msg["id"], {"chores": chores})
     except ValueError as err:
         _error(connection, msg, err)
 
