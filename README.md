@@ -16,6 +16,7 @@ Home Chores is a Home Assistant-native family chore board. It installs as a cust
 - Tablet-friendly family navigation that keeps each person's star total and Add person control visible.
 - A dedicated menu button that reopens the main Home Assistant sidebar from the chore panel.
 - Versioned frontend assets so Home Assistant and tablet browser caches load each update immediately after restart.
+- Phone safe-area spacing, larger header touch targets, and the Home Chores star retained beside the title.
 - Friendly starter data demonstrating dog feeding, vacuuming, homework, teeth brushing, and room cleaning.
 
 The future behaviour system can use the same person IDs and activity model, but it is intentionally not part of this first chore-focused version.
