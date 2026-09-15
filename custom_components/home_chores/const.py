@@ -3,7 +3,7 @@
 from typing import Final
 
 DOMAIN: Final = "home_chores"
-VERSION: Final = "0.2.3"
+VERSION: Final = "0.2.4"
 STORAGE_KEY: Final = DOMAIN
 STORAGE_VERSION: Final = 1
 PANEL_URL: Final = "home-chores"
